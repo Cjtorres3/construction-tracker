@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 15px; background: #f4f4f9; }
+    .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    .step { display: none; }
+    .step.active { display: block; }
+    h2 { color: #333; border-bottom: 2px solid #007bff; padding-bottom: 5px; }
+    .btn { display: inline-block; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 10px; width: 100%; box-sizing: border-box; }
+    .btn-secondary { background: #6c757d; }
+    .item-list { list-style: none; padding: 0; }
+    .item-list li { margin-bottom: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+    input[type="text"], input[type="number"], select, input[type="time"] { width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    .checkbox-item { display: flex; align-items: center; gap: 10px; }
+    .labor-entry { border: 1px solid #eee; padding: 10px; margin-bottom: 10px; border-radius: 5px; background: #fafafa; }
+    .status-msg { margin-top: 20px; padding: 15px; border-radius: 5px; text-align: center; font-weight: bold; }
+    .status-Red { background: #ffcccc; color: #cc0000; }
+    .status-Yellow { background: #fff3cd; color: #856404; }
+    .status-Green { background: #d4edda; color: #155724; }
+  </style>
+</head>
+<body>
+
+<div class="container" id="app">
+  <div id="loading">Loading data...</div>
+
+  <!-- Step 1: Project Selection -->
+  <div id="step1" class="step">
+    <h2>Step 1: Select Project</h2>
+    <select id="projectSelect"></select>
+    <button class="btn" onclick="nextStep(2)">Next</button>
+  </div>
+
+  <!-- Step 2: Equipment Checklist -->
+  <div id="step2" class="step">
+    <h2>Step 2: Equipment</h2>
+    <ul id="equipmentList" class="item-list"></ul>
+    <button class="btn btn-secondary" onclick="prevStep(1)">Back</button>
+    <button class="btn" onclick="nextStep(3)">Next</button>
+  </div>
+
+  <!-- Step 3: Labor Entry -->
+  <div id="step3" class="step">
+    <h2>Step 3: Labor</h2>
+    <div id="laborContainer"></div>
+    <button class="btn btn-secondary" onclick="prevStep(2)">Back</button>
+    <button class="btn" onclick="nextStep(4)">Next</button>
+  </div>
+
+  <!-- Step 4: Materials/Misc -->
+  <div id="step4" class="step">
+    <h2>Step 4: Materials & Misc</h2>
+    <div id="materialInputs">
+      <div class="material-entry">
+        <input type="text" placeholder="Item Name" class="mat-name">
+        <input type="number" placeholder="Quantity" class="mat-qty">
+        <input type="number" placeholder="Price" class="mat-price">
+      </div>
+    </div>
+    <button class="btn btn-secondary" onclick="addMaterialField()">+ Add Item</button>
+    <button class="btn btn-secondary" onclick="prevStep(3)">Back</button>
+    <button class="btn" onclick="submitForm()" id="submitBtn">Submit Daily Log</button>
+  </div>
+
+  <!-- Result Screen -->
+  <div id="result" class="step">
+    <h2>Submission Result</h2>
+    <div id="statusResult" class="status-msg"></div>
+    <button class="btn" onclick="location.reload()">New Entry</button>
+  </div>
+</div>
+
+<script>
+  let appData = {
+    projects: [],
+    equipment: [],
+    personnel: []
+  };
+
+  let currentStep = 1;
+
+  window.onload = function() {
+    google.script.run
+      .withSuccessHandler(data => {
+        appData = data;
+        initUI();
+      })
+      .getInitialData();
+  };
+
+  function initUI() {
+    document.getElementById('loading').style.display = 'none';
+    showStep(1);
+
+    // Populate Projects
+    const pSelect = document.getElementById('projectSelect');
+    appData.projects.forEach((p, index) => {
+      let opt = document.createElement('option');
+      opt.value = index;
+      opt.textContent = p.name;
+      pSelect.appendChild(opt);
+    });
+
+    // Populate Equipment
+    const eList = document.getElementById('equipmentList');
+    appData.equipment.forEach(e => {
+      let li = document.createElement('li');
+      li.className = 'checkbox-item';
+      li.innerHTML = `<input type="checkbox" class="eq-check" value="${e}"> <span>${e}</span>`;
+      eList.appendChild(li);
+    });
+
+    // Populate Labor
+    const lContainer = document.getElementById('laborContainer');
+    appData.personnel.forEach((p, index) => {
+      let div = document.createElement('div');
+      div.className = 'labor-entry';
+      div.innerHTML = `
+        <div class="checkbox-item">
+          <input type="checkbox" class="work-check" onchange="toggleLaborEntry(this, ${index})">
+          <strong>${p.name}</strong>
+        </div>
+        <div id="labor-details-${index}" style="display: none; margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
+          <div class="checkbox-item">
+            <input type="checkbox" class="sick-check" onchange="toggleLaborInputs(this, ${index})"> <span>Sick Day</span>
+          </div>
+          <div id="labor-inputs-${index}">
+            <label>Start Time:</label>
+            <input type="time" class="start-time" value="07:00">
+            <label>End Time:</label>
+            <input type="time" class="end-time" value="15:30">
+          </div>
+        </div>
+        <input type="hidden" class="personnel-name" value="${p.name}">
+        <input type="hidden" class="personnel-rate" value="${p.rate}">
+      `;
+      lContainer.appendChild(div);
+    });
+  }
+
+  function toggleLaborEntry(cb, index) {
+    const details = document.getElementById(`labor-details-${index}`);
+    details.style.display = cb.checked ? 'block' : 'none';
+  }
+
+  function toggleLaborInputs(cb, index) {
+    const inputs = document.getElementById(`labor-inputs-${index}`);
+    inputs.style.display = cb.checked ? 'none' : 'block';
+  }
+
+  function showStep(step) {
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    const id = (typeof step === 'number' || !isNaN(step)) ? 'step' + step : step;
+    document.getElementById(id).classList.add('active');
+    currentStep = step;
+  }
+
+  function nextStep(step) { showStep(step); }
+  function prevStep(step) { showStep(step); }
+
+  function addMaterialField() {
+    const div = document.createElement('div');
+    div.className = 'material-entry';
+    div.innerHTML = `
+      <input type="text" placeholder="Item Name" class="mat-name">
+      <input type="number" placeholder="Quantity" class="mat-qty">
+      <input type="number" placeholder="Price" class="mat-price">
+    `;
+    document.getElementById('materialInputs').appendChild(div);
+  }
+
+  function submitForm() {
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting...';
+
+    const pIndex = document.getElementById('projectSelect').value;
+    const project = appData.projects[pIndex];
+
+    const equipment = Array.from(document.querySelectorAll('.eq-check:checked')).map(cb => cb.value);
+
+    const labor = [];
+    document.querySelectorAll('.labor-entry').forEach(entry => {
+      const workedToday = entry.querySelector('.work-check').checked;
+      if (workedToday) {
+        const isSickDay = entry.querySelector('.sick-check').checked;
+        const startTime = entry.querySelector('.start-time').value;
+        const endTime = entry.querySelector('.end-time').value;
+        const name = entry.querySelector('.personnel-name').value;
+        const rate = entry.querySelector('.personnel-rate').value;
+
+        labor.push({
+          name,
+          rate: parseFloat(rate),
+          isSickDay,
+          startTime: `2000-01-01T${startTime}:00`,
+          endTime: `2000-01-01T${endTime}:00`
+        });
+      }
+    });
+
+    const materials = [];
+    document.querySelectorAll('.material-entry').forEach(entry => {
+      const name = entry.querySelector('.mat-name').value;
+      const qty = parseFloat(entry.querySelector('.mat-qty').value);
+      const price = parseFloat(entry.querySelector('.mat-price').value);
+      if (name && qty && price) {
+        materials.push({ name, quantity: qty, price });
+      }
+    });
+
+    const payload = { project, equipment, labor, materials };
+
+    google.script.run
+      .withSuccessHandler(result => {
+        showStep('result');
+        const resDiv = document.getElementById('statusResult');
+        resDiv.className = 'status-msg status-' + result.status;
+        resDiv.innerHTML = `
+          Daily Total: $${result.dailyTotal}<br>
+          Budget Status: ${result.status}<br>
+          (${result.percentage}% of Bid)
+        `;
+      })
+      .submitData(payload);
+  }
+</script>
+
+</body>
+</html>
