@@ -1,0 +1,17 @@
+Construction Cost App Requirements
+Workflow: > 1. Select Project (from 'Bids' sheet).
+2. Equipment Checklist (from 'Equipment' sheet).
+3. Labor Entry: Checklist of names. Input Start/End times.
+4. Materials/Misc Entry: Input item, quantity, and price.
+
+Calculation Rules:
+
+Labor Tax: Add 32% to the total daily pay.
+
+California OT: 1.5x after 8 hours, 2x after 12 hours (No 7th-day rule).
+
+Sick Days: Flat rate (8 hours base pay).
+
+Budget Logic: Red (>90% bid), Yellow (50-90%), Green (<50%).
+
+Tech Stack: Google Apps Script (HTML/CSS/JS frontend) connecting to Google Sheets API.
